@@ -50,7 +50,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context:.
+          context: .
           push: true
           # 同时构建 x86 和 ARM 版
           platforms: linux/amd64,linux/arm64
