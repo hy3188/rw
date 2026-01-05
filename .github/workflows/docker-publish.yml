@@ -1,8 +1,8 @@
-name: Build and Deploy Docker Image
+name: Build and Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 env:
@@ -32,16 +32,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- 修复点：强制将仓库名转换为小写 ---
       - name: Lowercase Repository Name
         run: |
-          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+          echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # 使用转换后的小写变量
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
@@ -50,14 +48,10 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context:.
           push: true
-          # 同时构建 x86 和 ARM 版
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 传递目标架构参数给 Dockerfile
-          build-args: |
-            TARGETARCH=amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
