@@ -1,50 +1,49 @@
-# --------------------------------------------------------
-# 阶段 1: 依赖构建层 (Build Stage)
-# 使用 slim 版本而非 alpine，以获得更好的 glibc 兼容性 [11]
-# --------------------------------------------------------
-FROM node:20-slim AS builder
+# ==========================================
+# 阶段 1: 资源下载 (Builder)
+# ==========================================
+FROM alpine:latest AS builder
+
+# 这里 ARG TARGETARCH 会自动由 Buildx 传入 (amd64 或 arm64)
+ARG TARGETARCH
+
+WORKDIR /build
+RUN apk add --no-cache curl jq unzip
+
+# 优化后的下载逻辑：直接利用 Docker 传入的架构名称
+# Cloudflare 官方文件名为 cloudflared-linux-amd64 或 cloudflared-linux-arm64
+# 这与 Docker 的 TARGETARCH (amd64/arm64) 完美对应
+RUN echo "Building for architecture: linux-${TARGETARCH}" && \
+    curl -L -o cloudflared "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${TARGETARCH}" && \
+    chmod +x cloudflared
+
+# ==========================================
+# 阶段 2: 运行时环境 (Runtime)
+# ==========================================
+FROM node:20-alpine
+
+# 安装必要的运行时依赖
+RUN apk add --no-cache ca-certificates bash curl tzdata
 
 WORKDIR /app
 
-# 复制依赖定义文件
-COPY package.json package-lock.json*./
+# 从 Builder 阶段复制二进制文件
+COPY --from=builder /build/cloudflared /usr/local/bin/cloudflared
 
-# 安装生产环境依赖 (CI 模式更严格)
-RUN npm ci --only=production
+# 复制项目文件
+COPY package.json.
+RUN npm install --production
 
-# --------------------------------------------------------
-# 阶段 2: 运行时镜像 (Runtime Stage)
-# --------------------------------------------------------
-FROM node:20-slim
-
-WORKDIR /app
-
-# 安装必要的系统工具
-# ca-certificates: 用于 HTTPS 请求验证
-# curl: 用于下载二进制文件
-# iproute2: 用于网络调试 (ss, ip 命令)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    iproute2 \
-    && rm -rf /var/lib/apt/lists/*
-
-# 从构建层复制 node_modules
-COPY --from=builder /app/node_modules./node_modules
-
-# 复制应用源码和脚本
-COPY src/./src/
-COPY scripts/entrypoint.sh./
+COPY src/ src/
+COPY scripts/ scripts/
 
 # 赋予脚本执行权限
-RUN chmod +x./entrypoint.sh
+RUN chmod +x scripts/entrypoint.sh
 
-# 设置环境变量默认值（可通过 docker run -e 覆盖）
-ENV PORT=3000
+# 环境变量设置
 ENV NODE_ENV=production
+ENV PORT=3000
 
-# 声明暴露端口
 EXPOSE 3000
 
-# 设置容器启动入口
-ENTRYPOINT ["./entrypoint.sh"]
+# 启动入口
+ENTRYPOINT ["./scripts/entrypoint.sh"]
