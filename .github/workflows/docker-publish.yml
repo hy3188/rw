@@ -1,45 +1,30 @@
-name: Build and Push Docker Image
+name: Build and Deploy Docker Image
 
-# 触发规则：推送到 main 分支或手动触发
 on:
   push:
     branches: [ "main" ]
-    # 仅当 Dockerfile 或相关文件变更时触发，节省资源
-    paths:
-      - 'Dockerfile'
-      - 'src/**'
-      - '.github/workflows/**'
   workflow_dispatch:
 
-# 定义环境变量
 env:
   REGISTRY: ghcr.io
-  # 镜像名称默认为仓库名 (格式: owner/repo)
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # 需要写入包的权限
     permissions:
       contents: read
       packages: write
 
     steps:
-      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 设置 QEMU 仿真器
-      # 这是构建多架构镜像（在 x86 机器上构建 ARM 镜像）的核心 [12]
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 3. 设置 Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 4. 登录 GitHub Container Registry (GHCR)
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -47,26 +32,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. 提取元数据（Tags, Labels）
+      # --- 修复点：强制将仓库名转换为小写 ---
+      - name: Lowercase Repository Name
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
+          # 使用转换后的小写变量
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest
             type=sha,format=long
 
-      # 6. 构建并推送镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context:.
           push: true
-          # 关键点：同时构建 amd64 和 arm64 架构 [13]
+          # 同时构建 x86 和 ARM 版
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 利用 GitHub Actions 缓存加速构建
+          # 传递目标架构参数给 Dockerfile
+          build-args: |
+            TARGETARCH=amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
