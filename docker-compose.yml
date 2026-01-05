@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/your-username/nodejs-argo:latest
+    container_name: node_tunnel
+    restart: unless-stopped
+    # 网络模式：如果需要更好的性能或IPv6支持，可考虑 host 模式
+    # network_mode: "host" 
+    ports:
+      - "3000:3000"
+    environment:
+      - ARGO_DOMAIN=app.example.com
+      - ARGO_AUTH=eyJhIjoi...
+      - UUID=de305d54-75b4-431b-adb2-eb6b9e546014
+      - PORT=3000
+    # 资源限制：防止脚本异常消耗过多资源 [14]
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
