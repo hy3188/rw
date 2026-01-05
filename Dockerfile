@@ -27,7 +27,7 @@ WORKDIR /app
 # 从 Builder 阶段复制自动匹配架构的二进制文件
 COPY --from=builder /build/cloudflared /usr/local/bin/cloudflared
 
-COPY package.json.
+COPY package.json .
 RUN npm install --production
 
 COPY src/ src/
